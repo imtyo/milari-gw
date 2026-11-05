@@ -1,4 +1,6 @@
-flask
+fastapi
+uvicorn
 requests
 beautifulsoup4
 python-jobspy
+prometheus-client
