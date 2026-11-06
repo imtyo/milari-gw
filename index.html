@@ -337,12 +337,20 @@
           </select></label>
         <label>Result size<input id="n" type="number" min="5" max="50" value="20" style="width:80px"></label>
       </div>
+      <div class="links" style="margin:12px 0 0">Preset: <button onclick="preset('jp')">Jepang</button> <button
+          onclick="preset('sg')">Singapore</button> <button onclick="preset('id')">Indonesia</button> <button
+          onclick="preset('rm')">Remote global</button></div>
       <div class="src" id="srcs">
         <label class="chk"><input type="checkbox" value="linkedin" checked>LinkedIn</label>
         <label class="chk"><input type="checkbox" value="indeed" checked>Indeed</label>
         <label class="chk"><input type="checkbox" value="jobstreet">JobStreet</label>
         <label class="chk"><input type="checkbox" value="adzuna">Adzuna</label>
         <label class="chk"><input type="checkbox" value="careercross">CareerCross</label>
+        <label class="chk"><input type="checkbox" value="tokyodev">TokyoDev</label>
+        <label class="chk"><input type="checkbox" value="japandev">Japan Dev</label>
+        <label class="chk"><input type="checkbox" value="mycareersfuture">MyCareersFuture (SG)</label>
+        <label class="chk"><input type="checkbox" value="remoteok">RemoteOK</label>
+        <label class="chk"><input type="checkbox" value="remotive">Remotive</label>
         <label class="chk"><input type="checkbox" id="remoteOnly">Hanya remote</label>
       </div>
       <div class="row" style="margin-top:12px">
@@ -373,12 +381,25 @@
     const saved = JSON.parse(localStorage.getItem("jh") || "{}");
     ["q", "loc", "country", "n", "skills"].forEach(id => { if (saved[id]) $("#" + id).value = saved[id]; $("#" + id).addEventListener("change", () => { saved[id] = $("#" + id).value; localStorage.setItem("jh", JSON.stringify(saved)); load(); updateLinks() }) });
 
+    const PRE = {
+      jp: { loc: "Japan", country: "japan", src: ["tokyodev", "japandev", "linkedin", "indeed", "careercross"] },
+      sg: { loc: "Singapore", country: "singapore", src: ["mycareersfuture", "linkedin", "indeed", "adzuna"] },
+      id: { loc: "Indonesia", country: "indonesia", src: ["jobstreet", "linkedin", "indeed"] },
+      rm: { loc: "Remote", country: "japan", src: ["remoteok", "remotive", "linkedin"], remote: true }
+    };
+    function preset(k) {
+      const p = PRE[k]; $("#loc").value = p.loc; $("#country").value = p.country; $("#remoteOnly").checked = !!p.remote;
+      document.querySelectorAll("#srcs input[value]").forEach(x => x.checked = p.src.includes(x.value)); updateLinks()
+    }
     function updateLinks() {
       const q = encodeURIComponent($("#q").value), l = encodeURIComponent($("#loc").value);
       const L = {
         LinkedIn: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${l}`,
         Indeed: `https://www.indeed.com/jobs?q=${q}&l=${l}`, JobStreet: `https://id.jobstreet.com/jobs?keywords=${q}&where=${l}`,
-        Adzuna: `https://www.adzuna.com/search?q=${q}&w=${l}`, CareerCross: `https://www.careercross.com/en/job-search/results?keywords=${q}`
+        Adzuna: `https://www.adzuna.com/search?q=${q}&w=${l}`, CareerCross: `https://www.careercross.com/en/job-search/results?keywords=${q}`,
+        TokyoDev: "https://www.tokyodev.com/jobs", "Japan Dev": "https://japan-dev.com/jobs",
+        MyCareersFuture: `https://www.mycareersfuture.gov.sg/search?search=${q}`,
+        Glints: `https://glints.com/id/opportunities/jobs/explore?keyword=${q}`, Kalibrr: `https://www.kalibrr.com/job-board/te/${q}`
       };
       $("#links").innerHTML = "Buka langsung di situs: " + Object.entries(L).map(([k, v]) => `<a href="${v}" target="_blank" rel="noopener">${k}</a>`).join("");
     }

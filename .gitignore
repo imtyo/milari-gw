@@ -1,0 +1,16 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Local data
+jobs.db
+logs/
+.env
+
+# Editors
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
