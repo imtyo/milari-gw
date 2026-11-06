@@ -1,4 +1,4 @@
-import os, re, io, csv, json, time, logging, sqlite3, threading, webbrowser
+import os, re, io, csv, json, time, uuid, logging, sqlite3, threading, webbrowser
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
@@ -149,7 +149,7 @@ def clean(v):
 def s_jobspy(site, q, loc, n, country, remote):
     from jobspy import scrape_jobs  # LinkedIn & Indeed
 
-    df = scrape_jobs(
+    kw = dict(
         site_name=[site],
         search_term=q,
         location=loc,
@@ -157,8 +157,11 @@ def s_jobspy(site, q, loc, n, country, remote):
         hours_old=24 * 21,
         country_indeed=country,
         is_remote=remote,
-        linkedin_fetch_description=True,
     )
+    try:
+        df = scrape_jobs(**kw, fetch_description=True)
+    except TypeError:  # versi lama
+        df = scrape_jobs(**kw, linkedin_fetch_description=True)
     out = []
     for _, r in df.iterrows():
         sal = " ".join(
@@ -306,7 +309,7 @@ def strip_html(h):
 
 
 def matches(q, txt, strict):
-    """strict=True: wajib ada kata kunci inti (mis. 'python'); False: cukup salah satu kata aja."""
+    """strict=True: wajib memuat kata kunci inti (mis. 'python'); False: cukup salah satu kata apa pun."""
     toks = [t for t in re.split(r"\W+", q.lower()) if len(t) > 2]
     core = [t for t in toks if t not in GENERIC]
     want = core if (strict and core) else toks
@@ -314,7 +317,7 @@ def matches(q, txt, strict):
 
 
 def scrape_listing(source, listing, pattern, q, n, loc="Japan"):
-    """Scraper generik (TokyoDev, Japan Dev)"""
+    """Scraper generik untuk halaman daftar lowongan statis (TokyoDev, Japan Dev). Best-effort."""
     from bs4 import BeautifulSoup
 
     r = requests.get(listing, headers=UA, timeout=TIMEOUT)
@@ -491,7 +494,9 @@ async def access_log(request: Request, call_next):
         M_HTTP.labels(request.method, request.url.path, "500").inc()
         return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
     route = request.scope.get("route")
-    path = route.path if route else "unmatched"
+    path = (
+        route.path if route else "unmatched"
+    )  # pakai template route agar label metrik tidak meledak
     M_HTTP.labels(request.method, path, str(resp.status_code)).inc()
     if path not in ("/metrics", "/health"):
         emit(
@@ -519,8 +524,27 @@ class JobPatch(BaseModel):
     notes: str | None = None
 
 
-@app.post("/api/search")
-def search(req: SearchReq):
+SEARCHES, SLOCK = {}, threading.Lock()
+WHAT = {
+    "linkedin": "Job listings + full descriptions (slowest)",
+    "indeed": "Job listings + descriptions",
+    "jobstreet": "Search API results (Indonesia)",
+    "adzuna": "Adzuna API results",
+    "careercross": "Search results page (HTML)",
+    "tokyodev": "Job board page (Japan)",
+    "japandev": "Job board page (Japan)",
+    "mycareersfuture": "Singapore government job API",
+    "remoteok": "Global remote jobs feed",
+    "remotive": "Global remote jobs API",
+}
+EXPECT = {
+    "linkedin": 70,
+    "indeed": 40,
+}  # untuk progres bar; default 10
+
+
+def run_search(sid, req):
+    S = SEARCHES[sid]
     adz = ADZ.get(req.country, os.getenv("ADZUNA_COUNTRY", "sg"))
     q, loc, n = req.q, req.location, req.n
     tasks = {
@@ -535,22 +559,35 @@ def search(req: SearchReq):
         "remoteok": lambda: s_remoteok(q, n),
         "remotive": lambda: s_remotive(q, n),
     }
-    names = [s for s in req.sources if s in tasks]
+    names, t0 = list(S["sources"]), S["t0"]
     emit(
         logging.INFO,
         "search_started",
+        search_id=sid,
         sources=names,
         query=q,
         location=loc,
         country=req.country,
     )
-    pool, t0 = ThreadPoolExecutor(max_workers=max(len(names), 1)), time.monotonic()
-    futs = {s: pool.submit(tasks[s]) for s in names}  # paralel
+
+    def worker(s):
+        try:
+            res = tasks[s]()
+            S["sources"][s].update(state="done", count=len(res), t1=time.monotonic())
+            return res
+        except Exception as e:
+            S["sources"][s].update(
+                state="failed", error=classify(e), t1=time.monotonic()
+            )
+            raise
+
+    pool = ThreadPoolExecutor(max_workers=max(len(names), 1))
+    futs = {s: pool.submit(worker, s) for s in names}  # paralel
     jobs, report = [], {}
     for s, f in futs.items():
         try:
             res = f.result(timeout=max(DEADLINE[s] - (time.monotonic() - t0), 0.1))
-            dur = time.monotonic() - t0
+            dur = S["sources"][s]["t1"] - t0
             M_SRC.labels(s, "ok").inc()
             M_DUR.labels(s).observe(dur)
             emit(
@@ -564,6 +601,8 @@ def search(req: SearchReq):
             report[s] = {"ok": True, "count": len(res)}
         except Exception as e:
             kind, dur = classify(e), time.monotonic() - t0
+            if S["sources"][s]["state"] == "running":
+                S["sources"][s].update(state="failed", error=kind, t1=time.monotonic())
             resp = getattr(e, "response", None)
             req_obj = getattr(e, "request", None)
             M_SRC.labels(s, kind).inc()
@@ -587,7 +626,7 @@ def search(req: SearchReq):
             report[s] = {"ok": False, "error": f"{kind}: {str(e)[:160]}"}
     pool.shutdown(wait=False)
 
-    added = {}
+    S["phase"], added = "saving", {}
     with db() as c:
         for j in jobs:
             if not j["url"]:
@@ -617,17 +656,108 @@ def search(req: SearchReq):
     emit(
         logging.INFO,
         "search_finished",
+        search_id=sid,
         added=sum(added.values()),
         added_by_source=added,
         failed=[s for s, r in report.items() if not r["ok"]],
         duration_ms=round((time.monotonic() - t0) * 1000),
     )
-    return {"report": report, "added": sum(added.values())}
+    S.update(
+        status="done",
+        phase="done",
+        added=sum(added.values()),
+        report=report,
+        t1=time.monotonic(),
+    )
+
+
+def run_search_safe(sid, req):
+    try:
+        run_search(sid, req)
+    except Exception as e:
+        emit(
+            logging.ERROR,
+            "search_crashed",
+            search_id=sid,
+            message=str(e)[:300],
+            exc_info=(type(e), e, e.__traceback__),
+        )
+        SEARCHES[sid].update(
+            status="error", phase="done", error=str(e)[:200], t1=time.monotonic()
+        )
+
+
+@app.post("/api/search")
+def search(req: SearchReq):
+    names = [s for s in req.sources if s in WHAT]
+    if not names:
+        raise HTTPException(422, "Select at least one source")
+    with SLOCK:
+        running = next(
+            (k for k, v in SEARCHES.items() if v["status"] == "running"), None
+        )
+        if running:
+            return {"search_id": running, "already_running": True}
+        sid, t0 = uuid.uuid4().hex[:8], time.monotonic()
+        SEARCHES[sid] = {
+            "status": "running",
+            "phase": "scraping",
+            "query": req.q,
+            "location": req.location,
+            "t0": t0,
+            "sources": {s: {"state": "running", "t0": t0} for s in names},
+        }
+        for old in list(SEARCHES)[:-20]:
+            SEARCHES.pop(old)
+    threading.Thread(target=run_search_safe, args=(sid, req), daemon=True).start()
+    return {"search_id": sid}
+
+
+@app.get("/api/search/{sid}")
+def search_status(sid: str):
+    S = SEARCHES.get(sid)
+    if not S:
+        raise HTTPException(404, "Unknown search")
+    now, srcs, frac = time.monotonic(), {}, 0
+    for s, st in S["sources"].items():
+        el = (st.get("t1") or now) - st["t0"]
+        frac += 1 if st["state"] != "running" else min(0.9, el / EXPECT.get(s, 10))
+        srcs[s] = {
+            "state": st["state"],
+            "count": st.get("count"),
+            "error": st.get("error"),
+            "what": WHAT[s],
+            "elapsed": round(el, 1),
+        }
+    pct = (
+        100
+        if S["status"] != "running"
+        else 97
+        if S["phase"] == "saving"
+        else round(95 * frac / len(srcs))
+    )
+    return {
+        "status": S["status"],
+        "phase": S["phase"],
+        "query": S["query"],
+        "location": S["location"],
+        "elapsed": round((S.get("t1") or now) - S["t0"], 1),
+        "percent": pct,
+        "sources": srcs,
+        "added": S.get("added"),
+        "report": S.get("report"),
+        "error": S.get("error"),
+    }
 
 
 @app.get("/api/jobs")
 def jobs_list(
-    status: str = "", q: str = "", skills: str = "", visa: int = 0, remote: int = 0
+    status: str = "",
+    q: str = "",
+    skills: str = "",
+    visa: int = 0,
+    remote: int = 0,
+    sort: str = "match",
 ):
     sk = [s.strip().lower() for s in skills.split(",") if s.strip()]
     sql, ar = "SELECT * FROM jobs WHERE 1=1", []
@@ -647,7 +777,11 @@ def jobs_list(
         r["matched"] = [s for s in sk if s in t]
         r["score"] = round(100 * len(r["matched"]) / len(sk)) if sk else 0
         r["description"] = r["description"][:350]
-    rows.sort(key=lambda r: -r["score"])
+    if sort == "posted":
+        rows.sort(key=lambda r: r["posted"] or "", reverse=True)
+    elif sort == "match":
+        rows.sort(key=lambda r: -r["score"])
+    # sort == "scraped"
     counts = {
         r[0]: r[1]
         for r in db().execute("SELECT status, COUNT(*) FROM jobs GROUP BY status")

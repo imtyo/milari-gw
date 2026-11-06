@@ -38,6 +38,18 @@ Adzuna tidak ada Asia dan kebanyakan Amerika dan Australia, jadi gunakan negara 
 - Tautan langsung ke halaman pencarian tiap situs.
 - Ekspor semua lowongan ke CSV.
 
+
+## Sumber tambahan
+ 
+| Sumber | Wilayah | Jenis | Catatan |
+|---|---|---|---|
+| TokyoDev, Japan Dev | Jepang | scraping HTML | Fokus developer, banyak yang English-friendly / sponsor visa |
+| MyCareersFuture | Singapore | API publik pemerintah | Tanpa API key |
+| RemoteOK, Remotive | Remote global | API publik | RemoteOK mewajibkan tautan balik ke remoteok.com; Remotive ada batasan, jangan terlalu sering |
+ 
+Tombol preset (Jepang / Singapore / Indonesia / Remote global). Glints dan Kalibrr tersedia sebagai tautan pencarian langsung.
+ 
+
 ## Catatan
 
 - LinkedIn membatasi permintaan, jadi gunakan hasil jumlah kecil (10-20) dan jangan klik "Cari" berulang-ulang.

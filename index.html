@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 
 <head>
   <meta charset="utf-8">
@@ -61,7 +61,8 @@
       letter-spacing: .2px
     }
 
-    header span {
+    header span,
+    .mut {
       color: var(--mut)
     }
 
@@ -156,6 +157,12 @@
       cursor: wait
     }
 
+    button.on {
+      background: var(--ai-t);
+      border-color: var(--ai);
+      color: var(--ai)
+    }
+
     .src {
       display: flex;
       gap: 14px;
@@ -179,12 +186,51 @@
       font-size: 13px
     }
 
-    #msg .bad {
+    .bad {
       color: var(--red)
     }
 
-    #msg .good {
+    .good {
       color: var(--ok)
+    }
+
+    #prog {
+      margin-top: 14px;
+      border-top: 1px solid var(--bd);
+      padding-top: 12px;
+      font-size: 14px
+    }
+
+    .pr {
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 10px;
+      padding: 4px 0;
+      font-size: 13px;
+      border-bottom: 1px dashed var(--bd)
+    }
+
+    .spin {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--bd);
+      border-top-color: var(--ai);
+      border-radius: 50%;
+      animation: sp .8s linear infinite;
+      vertical-align: -1px
+    }
+
+    @keyframes sp {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+      .spin {
+        animation: none
+      }
     }
 
     .tabs {
@@ -198,12 +244,6 @@
       border-radius: 20px;
       padding: 5px 12px;
       font-size: 14px
-    }
-
-    .tabs button.on {
-      background: var(--ai-t);
-      border-color: var(--ai);
-      color: var(--ai)
     }
 
     .job {
@@ -238,6 +278,18 @@
 
     .job h3 a:hover {
       text-decoration: underline
+    }
+
+    .new {
+      background: #c8362d;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+      letter-spacing: .5px
     }
 
     .meta {
@@ -281,10 +333,16 @@
       overflow: hidden
     }
 
+    .bar.big {
+      height: 8px;
+      margin: 6px 0 8px
+    }
+
     .bar i {
       display: block;
       height: 100%;
-      background: var(--ai)
+      background: var(--ai);
+      transition: width .4s
     }
 
     .desc {
@@ -325,7 +383,7 @@
   <main>
     <section class="panel">
       <div class="row">
-        <label class="grow">Keyword<input id="q" value="python software engineer"></label>
+        <label class="grow">Keywords<input id="q" value="python software engineer"></label>
         <label>Location<input id="loc" value="Japan"></label>
         <label>Country (Indeed)<select id="country">
             <option value="japan">Japan</option>
@@ -335,11 +393,12 @@
             <option value="uk">UK</option>
             <option value="australia">Australia</option>
           </select></label>
-        <label>Result size<input id="n" type="number" min="5" max="50" value="20" style="width:80px"></label>
+        <label>Results per site<input id="n" type="number" min="5" max="50" value="20" style="width:90px"></label>
       </div>
-      <div class="links" style="margin:12px 0 0">Preset: <button onclick="preset('jp')">Jepang</button> <button
-          onclick="preset('sg')">Singapore</button> <button onclick="preset('id')">Indonesia</button> <button
-          onclick="preset('rm')">Remote global</button></div>
+      <div class="links" style="margin:12px 0 0">Presets:
+        <button onclick="preset('jp')">Japan</button> <button onclick="preset('sg')">Singapore</button>
+        <button onclick="preset('id')">Indonesia</button> <button onclick="preset('rm')">Global remote</button>
+      </div>
       <div class="src" id="srcs">
         <label class="chk"><input type="checkbox" value="linkedin" checked>LinkedIn</label>
         <label class="chk"><input type="checkbox" value="indeed" checked>Indeed</label>
@@ -351,35 +410,45 @@
         <label class="chk"><input type="checkbox" value="mycareersfuture">MyCareersFuture (SG)</label>
         <label class="chk"><input type="checkbox" value="remoteok">RemoteOK</label>
         <label class="chk"><input type="checkbox" value="remotive">Remotive</label>
-        <label class="chk"><input type="checkbox" id="remoteOnly">Hanya remote</label>
+        <label class="chk"><input type="checkbox" id="remoteOnly">Remote only</label>
       </div>
       <div class="row" style="margin-top:12px">
-        <label class="grow">Skills (untuk skor kecocokan, pisah dengan koma)<input id="skills"
+        <label class="grow">Skills (comma-separated, used for the match score)<input id="skills"
             value="python, java, spring boot, sql, docker, aws, microservices, rest"></label>
-        <button class="pri" id="go">Cari lowongan</button>
+        <button class="pri" id="go">Search jobs</button>
       </div>
       <div class="links" id="links"></div>
+      <div id="prog" hidden></div>
       <div id="msg"></div>
     </section>
 
     <section>
       <div class="row" style="margin-bottom:10px">
-        <label class="grow">Filter hasil<input id="f" placeholder="judul atau perusahaan"></label>
-        <label class="chk"><input type="checkbox" id="fv">Visa / relokasi</label>
+        <label class="grow">Filter results<input id="f" placeholder="title or company"></label>
+        <label class="chk"><input type="checkbox" id="fv">Visa / relocation</label>
         <label class="chk"><input type="checkbox" id="fr">Remote</label>
-        <a class="btn" href="/api/export.csv">Ekspor CSV</a>
+        <a class="btn" href="/api/export.csv">Export CSV</a>
       </div>
+      <div class="row" style="margin-bottom:10px"><span class="mut">Sort by:</span><span id="sorts" class="tabs"
+          style="margin:0"></span></div>
       <div class="tabs" id="tabs"></div>
       <div id="list"></div>
     </section>
   </main>
   <script>
     const $ = s => document.querySelector(s), ST = ["new", "saved", "applied", "interview", "offer", "rejected"],
-      LB = { "": "Semua", new: "Baru", saved: "Disimpan", applied: "Dilamar", interview: "Interview", offer: "Offer", rejected: "Ditolak" };
-    let cur = "", counts = {};
+      LB = { "": "All", new: "New", saved: "Saved", applied: "Applied", interview: "Interview", offer: "Offer", rejected: "Rejected" },
+      SORTS = { match: "Best match", posted: "Date posted", scraped: "Date scraped" },
+      NAME = { linkedin: "LinkedIn", indeed: "Indeed", jobstreet: "JobStreet", adzuna: "Adzuna", careercross: "CareerCross", tokyodev: "TokyoDev", japandev: "Japan Dev", mycareersfuture: "MyCareersFuture", remoteok: "RemoteOK", remotive: "Remotive" };
+    let cur = "", sort = "match";
     const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    const saved = JSON.parse(localStorage.getItem("jh") || "{}");
-    ["q", "loc", "country", "n", "skills"].forEach(id => { if (saved[id]) $("#" + id).value = saved[id]; $("#" + id).addEventListener("change", () => { saved[id] = $("#" + id).value; localStorage.setItem("jh", JSON.stringify(saved)); load(); updateLinks() }) });
+    const ago = iso => { const m = (Date.now() - new Date(iso)) / 6e4; return m < 1 ? "just now" : m < 60 ? Math.round(m) + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago" };
+    const isNew = iso => Date.now() - new Date(iso) < 864e5;
+    const saved = JSON.parse(localStorage.getItem("milari") || "{}");
+    ["q", "loc", "country", "n", "skills"].forEach(id => {
+      if (saved[id]) $("#" + id).value = saved[id];
+      $("#" + id).addEventListener("change", () => { saved[id] = $("#" + id).value; localStorage.setItem("milari", JSON.stringify(saved)); load(); updateLinks() })
+    });
 
     const PRE = {
       jp: { loc: "Japan", country: "japan", src: ["tokyodev", "japandev", "linkedin", "indeed", "careercross"] },
@@ -391,55 +460,69 @@
       const p = PRE[k]; $("#loc").value = p.loc; $("#country").value = p.country; $("#remoteOnly").checked = !!p.remote;
       document.querySelectorAll("#srcs input[value]").forEach(x => x.checked = p.src.includes(x.value)); updateLinks()
     }
+
     function updateLinks() {
       const q = encodeURIComponent($("#q").value), l = encodeURIComponent($("#loc").value);
       const L = {
         LinkedIn: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${l}`,
         Indeed: `https://www.indeed.com/jobs?q=${q}&l=${l}`, JobStreet: `https://id.jobstreet.com/jobs?keywords=${q}&where=${l}`,
-        Adzuna: `https://www.adzuna.com/search?q=${q}&w=${l}`, CareerCross: `https://www.careercross.com/en/job-search/results?keywords=${q}`,
+        Adzuna: `https://www.adzuna.com/search?q=${q}&w=${l}`,
+        CareerCross: `https://www.careercross.com/en/job-search/results?keywords=${q}`,
         TokyoDev: "https://www.tokyodev.com/jobs", "Japan Dev": "https://japan-dev.com/jobs",
         MyCareersFuture: `https://www.mycareersfuture.gov.sg/search?search=${q}`,
         Glints: `https://glints.com/id/opportunities/jobs/explore?keyword=${q}`, Kalibrr: `https://www.kalibrr.com/job-board/te/${q}`
       };
-      $("#links").innerHTML = "Buka langsung di situs: " + Object.entries(L).map(([k, v]) => `<a href="${v}" target="_blank" rel="noopener">${k}</a>`).join("");
+      $("#links").innerHTML = "Open search pages directly: " + Object.entries(L).map(([k, v]) => `<a href="${v}" target="_blank" rel="noopener">${k}</a>`).join("");
+    }
+
+    function showProg(p) {
+      const rows = Object.entries(p.sources).map(([k, v]) => `<div class="pr"><b>${NAME[k] || k}</b><span class="mut">${esc(v.what)}</span><span>${v.state === "running" ? `<i class="spin"></i> scraping… ${v.elapsed}s` : v.state === "done" ? `<span class="good">✓ ${v.count} jobs</span> · ${v.elapsed}s` : `<span class="bad">✕ ${esc(v.error)}</span> · ${v.elapsed}s`}</span></div>`).join("");
+      const title = p.status === "running" ? (p.phase === "saving" ? "Saving results to the database…" : "Scraping job sites…") : p.status === "error" ? "Search failed" : "Search finished";
+      $("#prog").hidden = false;
+      $("#prog").innerHTML = `<div class="top"><b>${title}</b><span>${p.elapsed}s elapsed · ${p.percent}%</span></div><div class="bar big"><i style="width:${p.percent}%"></i></div>
+   <div class="mut" style="margin-bottom:6px">Query “${esc(p.query)}” in ${esc(p.location)}. LinkedIn is slow because it also fetches full job descriptions.</div>${rows}`;
     }
 
     $("#go").onclick = async () => {
       const sources = [...document.querySelectorAll("#srcs input[value]:checked")].map(x => x.value);
-      if (!sources.length) { $("#msg").innerHTML = '<span class="bad">Pilih minimal satu situs.</span>'; return }
-      $("#go").disabled = true; $("#msg").textContent = "Mencari… LinkedIn dengan deskripsi lengkap bisa memakan waktu 1-2 menit.";
+      if (!sources.length) { $("#msg").innerHTML = '<span class="bad">Select at least one site.</span>'; return }
+      $("#go").disabled = true; $("#go").textContent = "Searching…"; $("#msg").textContent = "";
       try {
-        const r = await (await fetch("/api/search", {
+        const r = await fetch("/api/search", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
             q: $("#q").value, location: $("#loc").value, country: $("#country").value, n: +$("#n").value, remote: $("#remoteOnly").checked, sources
           })
-        })).json();
-        $("#msg").innerHTML = `<span class="good">${r.added} lowongan baru ditambahkan.</span> ` + Object.entries(r.report).map(([k, v]) =>
-          v.ok ? `${k}: ${v.count} hasil` : `<span class="bad">${k} gagal: ${esc(v.error)}</span>`).join(" | ");
-      } catch (e) { $("#msg").innerHTML = '<span class="bad">Server tidak merespons: ' + esc(e) + '</span>' }
-      $("#go").disabled = false; load();
+        });
+        if (!r.ok) throw new Error((await r.json()).detail || r.status);
+        const { search_id } = await r.json(); let p;
+        for (; ;) { p = await (await fetch("/api/search/" + search_id)).json(); showProg(p); if (p.status !== "running") break; await new Promise(t => setTimeout(t, 1000)) }
+        $("#msg").innerHTML = p.status === "error" ? `<span class="bad">${esc(p.error)}</span>` : `<span class="good">${p.added} new jobs added.</span> Sites that failed are marked ✕ above; details are in logs/milari.log.`;
+      } catch (e) { $("#msg").innerHTML = '<span class="bad">Server did not respond: ' + esc(e.message || e) + '</span>' }
+      $("#go").disabled = false; $("#go").textContent = "Search jobs"; load();
     };
 
     async function load() {
-      const p = new URLSearchParams({ status: cur, q: $("#f").value, skills: $("#skills").value, visa: $("#fv").checked ? 1 : 0, remote: $("#fr").checked ? 1 : 0 });
-      const d = await (await fetch("/api/jobs?" + p)).json(); counts = d.counts;
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      const p = new URLSearchParams({ status: cur, q: $("#f").value, skills: $("#skills").value, sort, visa: $("#fv").checked ? 1 : 0, remote: $("#fr").checked ? 1 : 0 });
+      const d = await (await fetch("/api/jobs?" + p)).json(), counts = d.counts, total = Object.values(counts).reduce((a, b) => a + b, 0);
+      $("#sorts").innerHTML = Object.entries(SORTS).map(([k, v]) => `<button class="${k === sort ? "on" : ""}" data-k="${k}">${v}</button>`).join("");
+      $("#sorts").querySelectorAll("button").forEach(b => b.onclick = () => { sort = b.dataset.k; load() });
       $("#tabs").innerHTML = ["", ...ST].map(s => `<button class="${s === cur ? "on" : ""}" data-s="${s}">${LB[s]} (${s ? counts[s] || 0 : total})</button>`).join("");
       $("#tabs").querySelectorAll("button").forEach(b => b.onclick = () => { cur = b.dataset.s; load() });
-      $("#list").innerHTML = d.jobs.length ? d.jobs.map(card).join("") : '<div class="empty">Belum ada lowongan di sini. Jalankan pencarian di atas.</div>';
+      $("#list").innerHTML = d.jobs.length ? d.jobs.map(card).join("") : '<div class="empty">No jobs here yet. Run a search above.</div>';
     }
 
-    const card = j => `<article class="job ${j.score >= 60 ? "hi" : ""}" data-id="${j.id}">
-  <div class="top"><div><h3><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
-    <div class="meta">${esc(j.company || "Perusahaan tidak tercantum")} · ${esc(j.location)} · ${esc(j.posted)} ${j.salary ? "· " + esc(j.salary) : ""}</div>
-    <span class="tag">${esc(j.source)}</span>${j.visa ? '<span class="tag v">visa / relokasi / English</span>' : ""}${j.remote ? '<span class="tag r">remote</span>' : ""}
+    const card = j => `<article class="job ${j.score >= 60 ? "hi" : ""}">
+  <div class="top"><div><h3><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>${isNew(j.created) ? '<span class="new">NEW</span>' : ""}</h3>
+    <div class="meta">${esc(j.company || "Company not listed")} · ${esc(j.location)}${j.salary ? " · " + esc(j.salary) : ""}<br>
+      Posted: ${esc(j.posted || "unknown")} · Scraped: ${ago(j.created)} (${esc(j.created.slice(0, 16).replace("T", " "))})</div>
+    <span class="tag">${esc(j.source)}</span>${j.visa ? '<span class="tag v">visa / relocation / English</span>' : ""}${j.remote ? '<span class="tag r">remote</span>' : ""}
     ${j.matched.map(m => `<span class="tag">${esc(m)}</span>`).join("")}</div>
-   <div class="score">cocok ${j.score}%<div class="bar"><i style="width:${j.score}%"></i></div></div></div>
+   <div class="score">${j.score}% match<div class="bar"><i style="width:${j.score}%"></i></div></div></div>
   <div class="desc">${esc(j.description)}</div>
   <div class="act"><select onchange="upd(${j.id},{status:this.value})">${ST.map(s => `<option value="${s}" ${s === j.status ? "selected" : ""}>${LB[s]}</option>`).join("")}</select>
-    <button onclick="this.closest('.job').querySelector('textarea').toggleAttribute('hidden')">Catatan</button>
-    <button onclick="del(${j.id})">Hapus</button></div>
-  <textarea ${j.notes ? "" : "hidden"} placeholder="Catatan: kontak recruiter, jadwal interview, gaji yang dibahas…" onchange="upd(${j.id},{notes:this.value},1)">${esc(j.notes)}</textarea>
+    <button onclick="this.closest('.job').querySelector('textarea').toggleAttribute('hidden')">Notes</button>
+    <button onclick="del(${j.id})">Delete</button></div>
+  <textarea ${j.notes ? "" : "hidden"} placeholder="Notes: recruiter contact, interview schedule, salary discussed…" onchange="upd(${j.id},{notes:this.value},1)">${esc(j.notes)}</textarea>
 </article>`;
 
     async function upd(id, body, quiet) { await fetch("/api/jobs/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!quiet) load() }
